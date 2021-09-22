@@ -2,6 +2,8 @@
 # Node Utils
 
 static func find_node_by_class_path(node:Node, class_path:Array)->Node:
+	if not node: return null
+	
 	var res:Node
 
 	var stack = []
@@ -49,7 +51,10 @@ static func get_script_tab_container(scr_ed:ScriptEditor)->TabContainer:
 
 static func get_script_text_editor(scr_ed:ScriptEditor, idx:int)->Container:
 	var tab_cont = get_script_tab_container(scr_ed)
-	return tab_cont.get_child(idx)
+	if idx == -1 or tab_cont == null:
+		return null
+	else:
+		return tab_cont.get_child(idx)
 
 
 static func get_current_script_text_editor(scr_ed:ScriptEditor)->Container:
