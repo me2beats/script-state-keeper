@@ -1,24 +1,44 @@
-tool
-extends Resource
-
 var cfg_path = "res://addons/script-state-keeper/data.cfg"
 var config = ConfigFile.new()
 
 var folded_lines = {}
 var folded_lines_hash = {}
 
+var bookmarks = {}
+var bookmarks_hash = {}
+
+var breakpoints = {}
+var breakpoints_hash = {}
+
+
+const keys = ['folded_lines', 'bookmarks', 'breakpoints']
+
+
 func _init():
+
 	var err = config.load(cfg_path)
-	if err == ERR_FILE_NOT_FOUND:
+	if err == ERR_FILE_NOT_FOUND or !config.has_section("main"):
+		config_set_defaults()
 		config.save(cfg_path)
 		return
 
-	if not config.has_section_key('main', 'folded_lines'):
-		config.set_value('main', 'folded_lines', {})
-		config.save(cfg_path)
-		return
+	var need_save = false
 
-	folded_lines = config.get_value('main', 'folded_lines')
+	for key in keys:
+		if not config.has_section_key('main', key):
+			config.set_value('main', 'folded_lines', {})
+			need_save = true
+
+		set(key, config.get_value('main', key))
+
+	if need_save:
+		config.save(cfg_path)
+
+
+func config_set_defaults():
+	for key in keys:
+		config.set_value('main', key, {})
+
 
 func get_folded_lines(text_edit:TextEdit)->Array:
 	var result = []
@@ -27,29 +47,57 @@ func get_folded_lines(text_edit:TextEdit)->Array:
 			result.push_back(i)
 	return result
 
+func get_bookmarks(textedit:TextEdit)->Array:
+	var result = []
+	for i in textedit.get_line_count():
+		if textedit.is_line_set_as_bookmark(i):
+			result.push_back(i)
+	return result
+
+func get_breakpoints(textedit:TextEdit)->Array:
+	var result = []
+	for i in textedit.get_line_count():
+		if textedit.is_line_set_as_breakpoint(i):
+			result.push_back(i)
+	return result
+	
 
 func update_folded_lines(script:GDScript, text_edit:TextEdit):
-	if not text_edit: return
-	
-	var path = script.resource_path
+	_update('folded_lines', script, text_edit)
 
-	var folded = get_folded_lines(text_edit)
-	var folded_hash = folded.hash()
-	if folded_hash == folded_lines_hash.get(path): return
-	folded_lines[path] = folded
-	folded_lines_hash[path] = folded_hash
+func update_bookmarks(script:GDScript, text_edit:TextEdit):
+	_update('bookmarks', script, text_edit)
+
+func update_breakpoints(script:GDScript, text_edit:TextEdit):
+	_update('breakpoints', script, text_edit)
+
+
+func _update(key:String, script:GDScript, text_edit:TextEdit):
+	if not text_edit: return
+	var path = script.resource_path
+	var items = call('get_'+key, text_edit)
+	var _hash = items.hash()
+	if _hash == get(key+'_hash').get(path): return
+	get(key)[path] = items
+	get(key+'_hash')[path] = _hash
 
 
 func save_current_data():
-	config.set_value('main', 'folded_lines', folded_lines)	
+	for key in keys:
+		config.set_value('main', key, get(key))	
 	config.save(cfg_path)
 
 
-# from data
-func set_folded_lines(textedit:TextEdit, script_path:String):
-	
-	var folded = folded_lines.get(script_path)
-	if not folded: return
+# set from data:
 
-	for i in folded:
+func set_folded_lines(textedit:TextEdit, script_path:String):
+	for i in folded_lines.get(script_path, []):
 		textedit.fold_line(i)
+
+func set_bookmarks(textedit:TextEdit, script_path:String):
+	for i in bookmarks.get(script_path, []):
+		textedit.set_line_as_bookmark(i, true)
+
+func set_breakpoints(textedit:TextEdit, script_path:String):
+	for i in breakpoints.get(script_path, []):
+		textedit.set_line_as_breakpoint(i, true)
