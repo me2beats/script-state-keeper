@@ -7,10 +7,10 @@ var config = ConfigFile.new()
 var folded_lines = {}
 var folded_lines_hash = {}
 
-func init(plugin:EditorPlugin):
+func _init():
 	var err = config.load(cfg_path)
 	if err == ERR_FILE_NOT_FOUND:
-		config.save()
+		config.save(cfg_path)
 		return
 
 	if not config.has_section_key('main', 'folded_lines'):
@@ -19,7 +19,6 @@ func init(plugin:EditorPlugin):
 		return
 
 	folded_lines = config.get_value('main', 'folded_lines')
-
 
 func get_folded_lines(text_edit:TextEdit)->Array:
 	var result = []
@@ -30,6 +29,8 @@ func get_folded_lines(text_edit:TextEdit)->Array:
 
 
 func update_folded_lines(script:GDScript, text_edit:TextEdit):
+	if not text_edit: return
+	
 	var path = script.resource_path
 
 	var folded = get_folded_lines(text_edit)

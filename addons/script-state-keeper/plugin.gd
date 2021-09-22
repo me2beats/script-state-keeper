@@ -3,61 +3,44 @@ extends EditorPlugin
 
 const Utils = preload("utils.gd")
 
-var scr_ed = get_editor_interface().get_script_editor()
-var tab_container = Utils.get_script_tab_container(scr_ed)
+var script_editor: ScriptEditor
+var current_textedit: TextEdit
+var current_script: Script
+var data: Resource
 
-const data = preload("data.tres")
 
 func _enter_tree():
-	data.init(self)
+	data = preload("data.gd").new() # data related subroutines
 
-	tab_container.connect("tab_changed", self, "on_tab")
-
-	var current_script = scr_ed.get_current_script()
-	if not current_script: return
-	var current_textedit = Utils.get_current_text_edit(scr_ed)
+	script_editor = get_editor_interface().get_script_editor()
+	script_editor.connect("editor_script_changed", self, "_on_script_changed")
+	script_editor.connect("script_close", self, "_on_script_close")
 	
-	set_connections(current_textedit, tab_container.current_tab, current_script)
+	_on_script_changed(script_editor.get_current_script()) # init call
 
 
-func set_connections(textedit:TextEdit, tab:int, script:GDScript):
-	var vscroll:VScrollBar = textedit.get_node('VScrollBar')
-	vscroll.connect("changed", self, "on_vscroll_changed", [vscroll, textedit, script])
-	textedit.connect("tree_exiting", self, "on_text_edit_tree_exit", [textedit]) # mb no need
+func _on_script_changed(new_script): # called when active script is changed
+	if not new_script: return # all scripts are closed
+	
+	if current_script: # store data for current script
+		data.update_folded_lines(current_script, current_textedit)
+	
+	var new_textedit = Utils.get_current_text_edit(script_editor) # get a TextEdit for new script
+	if not new_textedit: return # just in case
+	
+	data.set_folded_lines(new_textedit, new_script.resource_path) # restore data for new script (if has)
+	
+	# make new script the current script
+	current_script = new_script
+	current_textedit = new_textedit
 
-
-
-func on_tab(tab:int):
-	yield(get_tree(), "idle_frame") # ensures text edit is ready, maybe there's a better way
-	tab = tab_container.current_tab
-
-	var current_script = scr_ed.get_current_script()
-	if not current_script: # doc is opened, not a script
-		return
-
-	var current_textedit = Utils.get_current_text_edit(scr_ed)
-	if not current_textedit: # is it possible? 
-		return
-
-	data.set_folded_lines(current_textedit, current_script.resource_path)
-
-	if not current_textedit.is_connected("tree_exiting", self, "on_text_edit_tree_exit"):
-		set_connections(current_textedit, tab, current_script)
-
-
-
-
-
-func on_vscroll_changed(vscroll:VScrollBar, textedit:TextEdit, script:GDScript):
-	if vscroll.has_meta("recent_max_val"):
-		if vscroll.max_value == vscroll.get_meta("recent_max_val"): return
-	vscroll.set_meta("recent_max_val", vscroll.max_value)
-
-	data.update_folded_lines(script, textedit)
-
-
-func on_text_edit_tree_exit(text_edit:TextEdit):
-	data.save_current_data()
+func _on_script_close(script): # called when active script is about to close
+	if script != current_script: # in the case when there was no script change
+		_on_script_changed(script) # act as if it has changed
+	data.save_current_data() # save config file
 
 func _exit_tree():
+	script_editor.disconnect("editor_script_changed", self, "_on_script_changed")
+	script_editor.disconnect("script_close", self, "_on_script_close")
 	data.save_current_data()
+	data = null
