@@ -19,23 +19,18 @@ func _enter_tree():
 	
 	_on_script_changed(script_editor.get_current_script()) # init call
 
-
 func _on_script_changed(new_script:Script): # called when active script is changed
 	if not new_script: return # all scripts are closed
 	
 	if current_script: # store data for current script
-		data.update_folded_lines(current_script, current_textedit)
-		data.update_bookmarks(current_script, current_textedit)
-		data.update_breakpoints(current_script, current_textedit)
-
+		data.update(current_script, current_textedit)
+	
 	var new_textedit = Utils.get_current_text_edit(script_editor) # get a TextEdit for new script
 	if not new_textedit: return # just in case
 	
 	# restore:
 	var script_path = new_script.resource_path
-	data.set_folded_lines(new_textedit, script_path)
-	data.set_bookmarks(new_textedit, script_path)
-	data.set_breakpoints(new_textedit, script_path)
+	data.restore(new_textedit, script_path)
 	
 	# make new script the current script
 	current_script = new_script
