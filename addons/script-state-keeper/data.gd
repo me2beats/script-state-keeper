@@ -1,5 +1,8 @@
 var cfg_path = "res://addons/script-state-keeper/data.cfg"
 var config = ConfigFile.new()
+var file = File.new()
+
+var md5 = {}
 
 var folded_lines = {}
 var folded_lines_hash = {}
@@ -11,7 +14,7 @@ var breakpoints = {}
 var breakpoints_hash = {}
 
 
-const keys = ['folded_lines', 'bookmarks', 'breakpoints']
+const keys = ['md5', 'folded_lines', 'bookmarks', 'breakpoints']
 
 
 func _init():
@@ -34,11 +37,9 @@ func _init():
 	if need_save:
 		config.save(cfg_path)
 
-
 func config_set_defaults():
 	for key in keys:
 		config.set_value('main', key, {})
-
 
 func get_folded_lines(text_edit:TextEdit)->Array:
 	var result = []
@@ -60,33 +61,24 @@ func get_breakpoints(textedit:TextEdit)->Array:
 		if textedit.is_line_set_as_breakpoint(i):
 			result.push_back(i)
 	return result
-	
 
-func update_folded_lines(script:GDScript, text_edit:TextEdit):
-	_update('folded_lines', script, text_edit)
-
-func update_bookmarks(script:GDScript, text_edit:TextEdit):
-	_update('bookmarks', script, text_edit)
-
-func update_breakpoints(script:GDScript, text_edit:TextEdit):
-	_update('breakpoints', script, text_edit)
-
-
-func _update(key:String, script:GDScript, text_edit:TextEdit):
+func update(script:GDScript, text_edit:TextEdit):
 	if not text_edit: return
 	var path = script.resource_path
-	var items = call('get_'+key, text_edit)
-	var _hash = items.hash()
-	if _hash == get(key+'_hash').get(path): return
-	get(key)[path] = items
-	get(key+'_hash')[path] = _hash
-
+	
+	for key in keys.slice(1, keys.size()): # except md5
+		var items = call('get_'+key, text_edit)
+		var _hash = items.hash()
+		if _hash == get(key+'_hash').get(path): return
+		get(key)[path] = items
+		get(key+'_hash')[path] = _hash
 
 func save_current_data():
+	for path in folded_lines.keys():
+		md5[path] = file.get_md5(path)
 	for key in keys:
-		config.set_value('main', key, get(key))	
+		config.set_value('main', key, get(key))
 	config.save(cfg_path)
-
 
 # set from data:
 
@@ -101,3 +93,28 @@ func set_bookmarks(textedit:TextEdit, script_path:String):
 func set_breakpoints(textedit:TextEdit, script_path:String):
 	for i in breakpoints.get(script_path, []):
 		textedit.set_line_as_breakpoint(i, true)
+
+func restore(textedit:TextEdit, script_path: String):
+	_validate_path(script_path)
+	
+	set_folded_lines(textedit, script_path)
+	set_bookmarks(textedit, script_path)
+	set_breakpoints(textedit, script_path)
+
+func _validate_path(script_path: String):
+	var _hash = md5.get(script_path)
+	
+	if not _hash: # the path is invalid
+		var outdated_path := ''
+		_hash = file.get_md5(script_path)
+		for key in md5.keys():
+			if md5[key] == _hash: # found already stored hash
+				outdated_path = key
+				break
+		
+		for key in keys:
+			var dict: Dictionary = get(key)
+			if outdated_path: # name or location of the script has been changed
+				var value = dict[outdated_path]
+				dict[script_path] = value # add correct records
+			dict.erase(outdated_path) # get rid of outdated records
